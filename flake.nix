@@ -62,6 +62,12 @@
             openssl
             systemdMinimal
             hidapi
+            libayatana-appindicator
+          ];
+
+          # Libraries loaded via dlopen at runtime (not caught by autoPatchelfHook)
+          runtimeDependencies = with pkgs; [
+            libayatana-appindicator
           ];
 
           unpackPhase = ''
