@@ -49,6 +49,7 @@
             dpkg
             autoPatchelfHook
             wrapGAppsHook3
+            gtk3 # for gtk-update-icon-cache
           ];
 
           buildInputs = with pkgs; [
@@ -63,6 +64,7 @@
             systemdMinimal
             hidapi
             libayatana-appindicator
+            hicolor-icon-theme
           ];
 
           # Libraries loaded via dlopen at runtime (not caught by autoPatchelfHook)
@@ -86,9 +88,14 @@
               cp etc/udev/rules.d/* $out/lib/udev/rules.d/
             fi
 
-            # Fix desktop file to use absolute path
+            # Fix desktop file: absolute path + StartupWMClass for Wayland icon matching
             substituteInPlace $out/share/applications/*.desktop \
               --replace-fail "Exec=opendeck" "Exec=$out/bin/opendeck"
+            echo "StartupWMClass=opendeck" >> $out/share/applications/opendeck.desktop
+
+            # Generate icon theme cache
+            cp ${pkgs.hicolor-icon-theme}/share/icons/hicolor/index.theme $out/share/icons/hicolor/
+            gtk-update-icon-cache $out/share/icons/hicolor
 
             runHook postInstall
           '';
