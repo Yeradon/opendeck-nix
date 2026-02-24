@@ -73,12 +73,12 @@
             libayatana-appindicator
           ];
 
-          # Ensure xdg-open is available for opening URLs in the default browser
+          # Ensure xdg-open and node are available for plugins and URL opening
           # Also disable WebKit's bubblewrap sandbox — it strips GIO_EXTRA_MODULES
           # from WebKitNetworkProcess, breaking TLS. Standard workaround on NixOS.
           preFixup = ''
             gappsWrapperArgs+=(
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.xdg-utils ]}
+              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.xdg-utils pkgs.nodejs ]}
               --set WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS 1
             )
           '';
