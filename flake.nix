@@ -73,6 +73,11 @@
             libayatana-appindicator
           ];
 
+          # Ensure xdg-open is available for opening URLs in the default browser
+          preFixup = ''
+            gappsWrapperArgs+=(--prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.xdg-utils ]})
+          '';
+
           unpackPhase = ''
             dpkg-deb -x $src .
           '';
