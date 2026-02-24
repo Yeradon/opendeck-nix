@@ -86,6 +86,10 @@
               cp etc/udev/rules.d/* $out/lib/udev/rules.d/
             fi
 
+            # Fix desktop file to use absolute path
+            substituteInPlace $out/share/applications/*.desktop \
+              --replace-fail "Exec=opendeck" "Exec=$out/bin/opendeck"
+
             runHook postInstall
           '';
 
