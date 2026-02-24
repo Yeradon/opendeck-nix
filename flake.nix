@@ -65,6 +65,7 @@
             hidapi
             libayatana-appindicator
             hicolor-icon-theme
+            glib-networking # TLS backend for GIO (needed for HTTPS in WebKitGTK)
           ];
 
           # Libraries loaded via dlopen at runtime (not caught by autoPatchelfHook)
