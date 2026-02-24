@@ -132,8 +132,13 @@
 
           installPhase = ''
             runHook preInstall
-            mkdir -p $out/Applications
+            mkdir -p $out/Applications $out/bin
             cp -r OpenDeck.app $out/Applications/
+            cat > $out/bin/opendeck <<EOF
+            #!${pkgs.runtimeShell}
+            exec "$out/Applications/OpenDeck.app/Contents/MacOS/OpenDeck" "\$@"
+            EOF
+            chmod +x $out/bin/opendeck
             runHook postInstall
           '';
 
@@ -146,5 +151,13 @@
           };
         };
     });
+
+    overlays.default = final: _prev: {
+      opendeck = self.packages.${final.system}.opendeck;
+    };
+
+    darwinModules.default = { pkgs, ... }: {
+      environment.systemPackages = [ self.packages.${pkgs.system}.opendeck ];
+    };
   };
 }
