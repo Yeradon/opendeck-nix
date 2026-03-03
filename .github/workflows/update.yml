@@ -1,0 +1,82 @@
+name: Update OpenDeck
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for updates and modify flake.nix
+        id: update
+        run: |
+          # Get the latest release tag from GitHub API
+          LATEST_TAG=$(curl -sL https://api.github.com/repos/nekename/OpenDeck/releases/latest | jq -r .tag_name)
+          VERSION=${LATEST_TAG#v}
+          
+          # Extract the current version from flake.nix
+          CURRENT_VERSION=$(grep -m1 -E 'version = "[^"]+"' flake.nix | cut -d '"' -f 2)
+
+          if [ "$VERSION" = "$CURRENT_VERSION" ]; then
+            echo "Already at latest version $VERSION"
+            echo "updated=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Updating from $CURRENT_VERSION to $VERSION"
+          
+          # Update the version string in flake.nix
+          sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$VERSION\"/" flake.nix
+          
+          echo "Fetching new hashes..."
+          for PLATFORM in "x86_64-linux amd64.deb" "aarch64-linux arm64.deb" "x86_64-darwin x64.app.tar.gz" "aarch64-darwin aarch64.app.tar.gz"; do
+            set -- $PLATFORM
+            SYS=$1
+            EXT=$2
+            
+            if [[ "$SYS" == *-linux ]]; then
+              URL="https://github.com/nekename/OpenDeck/releases/download/v${VERSION}/opendeck_${VERSION}_${EXT}"
+            else
+              URL="https://github.com/nekename/OpenDeck/releases/download/v${VERSION}/OpenDeck_${EXT}"
+            fi
+            
+            echo "Prefetching $URL for $SYS..."
+            HASH=$(nix-prefetch-url "$URL")
+            
+            # Replace the hash for the specific system using awk
+            awk -v sys="$SYS" -v h="$HASH" '
+              $0 ~ sys " = {" { in_block = 1 }
+              in_block && /sha256 =/ {
+                sub(/sha256 = "[^"]+"/, "sha256 = \"" h "\"")
+                in_block = 0
+              }
+              { print }
+            ' flake.nix > temp.nix && mv temp.nix flake.nix
+          done
+          
+          echo "updated=true" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.update.outputs.updated == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.PAT }}
+          commit-message: "chore(flake): update opendeck to ${{ steps.update.outputs.version }}"
+          title: "chore: update opendeck to ${{ steps.update.outputs.version }}"
+          body: "Automated update of OpenDeck to latest release version ${{ steps.update.outputs.version }}."
+          branch: "update-opendeck"
+          delete-branch: true
