@@ -101,10 +101,13 @@
               libxcb
               libXau
               libXdmcp
+              cacert
             ];
             runScript = "opendeck";
             profile = ''
               export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+              export GIO_EXTRA_MODULES=/usr/lib/gio/modules
+              export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
             '';
           };
         in
