@@ -37,78 +37,102 @@
       default = self.packages.${system}.opendeck;
 
       opendeck = if pkgs.stdenv.isLinux then
+        let
+          unwrapped = pkgs.stdenv.mkDerivation {
+            pname = "opendeck-unwrapped";
+            inherit version;
+            src = pkgs.fetchurl {
+              inherit (source) url sha256;
+            };
+            nativeBuildInputs = [ pkgs.dpkg ];
+            unpackPhase = ''
+              dpkg-deb -x $src .
+            '';
+            installPhase = ''
+              mkdir -p $out
+              cp -r usr/* $out/
+              if [ -d etc/udev ]; then
+                mkdir -p $out/lib/udev/rules.d
+                cp etc/udev/rules.d/* $out/lib/udev/rules.d/
+              fi
+            '';
+          };
+
+          fhs = pkgs.buildFHSEnv {
+            name = "opendeck";
+            targetPkgs = pkgs: with pkgs; [
+              unwrapped
+              webkitgtk_4_1
+              gtk3
+              glib
+              libsoup_3
+              cairo
+              gdk-pixbuf
+              pango
+              openssl
+              systemdMinimal
+              hidapi
+              libayatana-appindicator
+              hicolor-icon-theme
+              glib-networking
+              xdg-utils
+              nodejs
+              # Common libraries needed by GUI apps in FHS
+              fontconfig
+              freetype
+              dbus
+              zlib
+              libX11
+              libXcursor
+              libXrandr
+              libXi
+              libXext
+              libXdamage
+              libXfixes
+              libXcomposite
+              libXrender
+              libXtst
+              libXScrnSaver
+              libXinerama
+              libxkbcommon
+              wayland
+              mesa
+              libGL
+              libxcb
+              libXau
+              libXdmcp
+            ];
+            runScript = "opendeck";
+            profile = ''
+              export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+            '';
+          };
+        in
         pkgs.stdenv.mkDerivation {
           pname = "opendeck";
           inherit version;
 
-          src = pkgs.fetchurl {
-            inherit (source) url sha256;
-          };
-
-          nativeBuildInputs = with pkgs; [
-            dpkg
-            autoPatchelfHook
-            wrapGAppsHook3
-            gtk3 # for gtk-update-icon-cache
-          ];
-
-          buildInputs = with pkgs; [
-            webkitgtk_4_1
-            gtk3
-            glib
-            libsoup_3
-            cairo
-            gdk-pixbuf
-            pango
-            openssl
-            systemdMinimal
-            hidapi
-            libayatana-appindicator
-            hicolor-icon-theme
-            glib-networking # TLS backend for GIO (needed for HTTPS in WebKitGTK)
-          ];
-
-          # Libraries loaded via dlopen at runtime (not caught by autoPatchelfHook)
-          runtimeDependencies = with pkgs; [
-            libayatana-appindicator
-          ];
-
-          # Ensure xdg-open and node are available for plugins and URL opening
-          # Also disable WebKit's bubblewrap sandbox — it strips GIO_EXTRA_MODULES
-          # from WebKitNetworkProcess, breaking TLS. Standard workaround on NixOS.
-          preFixup = ''
-            gappsWrapperArgs+=(
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.xdg-utils pkgs.nodejs ]}
-              --set WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS 1
-            )
-          '';
-
-          unpackPhase = ''
-            dpkg-deb -x $src .
-          '';
+          phases = [ "installPhase" ];
 
           installPhase = ''
-            runHook preInstall
+            mkdir -p $out/bin $out/share $out/lib
 
-            mkdir -p $out
-            cp -r usr/* $out/
+            # Link the FHS wrapper
+            ln -s ${fhs}/bin/opendeck $out/bin/opendeck
 
-            # Install udev rules
-            if [ -d etc/udev ]; then
-              mkdir -p $out/lib/udev/rules.d
-              cp etc/udev/rules.d/* $out/lib/udev/rules.d/
+            # Copy icons and desktop files from unwrapped
+            cp -r ${unwrapped}/share/icons $out/share/
+            cp -r ${unwrapped}/share/applications $out/share/
+
+            # Copy udev rules
+            if [ -d ${unwrapped}/lib/udev ]; then
+              cp -r ${unwrapped}/lib/udev $out/lib/
             fi
 
             # Fix desktop file: absolute path + StartupWMClass for Wayland icon matching
             substituteInPlace $out/share/applications/*.desktop \
               --replace-fail "Exec=opendeck" "Exec=$out/bin/opendeck"
             echo "StartupWMClass=opendeck" >> $out/share/applications/opendeck.desktop
-
-            # Generate icon theme cache
-            cp ${pkgs.hicolor-icon-theme}/share/icons/hicolor/index.theme $out/share/icons/hicolor/
-            gtk-update-icon-cache $out/share/icons/hicolor
-
-            runHook postInstall
           '';
 
           meta = with pkgs.lib; {
