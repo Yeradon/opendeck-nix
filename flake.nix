@@ -82,25 +82,25 @@
               freetype
               dbus
               zlib
-              libX11
-              libXcursor
-              libXrandr
-              libXi
-              libXext
-              libXdamage
-              libXfixes
-              libXcomposite
-              libXrender
-              libXtst
-              libXScrnSaver
-              libXinerama
+              libx11
+              libxcursor
+              libxrandr
+              libxi
+              libxext
+              libxdamage
+              libxfixes
+              libxcomposite
+              libxrender
+              libxtst
+              libxscrnsaver
+              libxinerama
               libxkbcommon
               wayland
               mesa
               libGL
               libxcb
-              libXau
-              libXdmcp
+              libxau
+              libxdmcp
               cacert
             ];
             runScript = "opendeck";
