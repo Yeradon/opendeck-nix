@@ -5,24 +5,24 @@
 
   outputs = { self, nixpkgs }:
   let
-    version = "2.13.1";
+    version = "2.14.0";
 
     sources = {
       x86_64-linux = {
         url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/opendeck_${version}_amd64.deb";
-        sha256 = "0a3ghw38lfai7n4gkcwg4wach1nj8c1lpbzgv58ya6dwzz9fsfp1";
+        sha256 = "0mm6psx7i6pdr7xd53qx6ncna6hq61zgv0zdmk39v8hf2dqq44xl";
       };
       aarch64-linux = {
         url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/opendeck_${version}_arm64.deb";
-        sha256 = "02x0dba6sap4x9r62xba11f4yijnw4py2fqp24daqxbp4if91469";
+        sha256 = "1v8jlsiv3djrm5d495b64gzv06f6fnv85al95pd785f7q4x53sn5";
       };
       x86_64-darwin = {
         url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/OpenDeck_x64.app.tar.gz";
-        sha256 = "1xnczki2fsz9jhagm31zjmbcjkfqrxmr67v8sahvx8vfr3898wba";
+        sha256 = "0bgkd57jnwp7m0wds9x645x66rzpx2hlbxh2mnz9dylyadspv878";
       };
       aarch64-darwin = {
         url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/OpenDeck_aarch64.app.tar.gz";
-        sha256 = "1498bgv8878rms72lz9n7kh3k4dfmidhsrgh59jyphn24c1h2myq";
+        sha256 = "1s6zb0r9p0irsvpsyb523d62kj7fd2899w5lh6jbdyqdsvgbr4bi";
       };
     };
 
