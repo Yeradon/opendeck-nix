@@ -36,7 +36,7 @@
     in {
       default = self.packages.${system}.opendeck;
 
-      opendeck = if pkgs.stdenv.isLinux then
+      opendeck = if pkgs.stdenv.hostPlatform.isLinux then
         let
           unwrapped = pkgs.stdenv.mkDerivation {
             pname = "opendeck-unwrapped";
