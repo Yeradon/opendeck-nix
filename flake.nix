@@ -1,190 +1,64 @@
 {
   description = "OpenDeck - Stream Deck software for Linux and macOS";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-  outputs = { self, nixpkgs }:
-  let
-    version = "2.14.1";
-
-    sources = {
-      x86_64-linux = {
-        url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/opendeck_${version}_amd64.deb";
-        sha256 = "030kvb1b9vl45naqbdknm69pxkqbc8x60b1msmda83yfg2bbgc7b";
-      };
-      aarch64-linux = {
-        url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/opendeck_${version}_arm64.deb";
-        sha256 = "1d45mdddmfg7qcbv9lcyhynygm7h6wy8dl198ch7v935pl0rhvxi";
-      };
-      x86_64-darwin = {
-        url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/OpenDeck_x64.app.tar.gz";
-        sha256 = "0kv5ljy6bhcyj186gd31zvaklvxfcd2cih5gi5mj7s9ah08r54j2";
-      };
-      aarch64-darwin = {
-        url = "https://github.com/nekename/OpenDeck/releases/download/v${version}/OpenDeck_aarch64.app.tar.gz";
-        sha256 = "0gf912a2wvdzpiqmjjfbpkdh1izly0zix1q48nr1c5qba87hh2wg";
-      };
-    };
-
-    supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
-    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-  in {
-    packages = forAllSystems (system:
+  outputs =
+    { self, nixpkgs }:
     let
-      pkgs = nixpkgs.legacyPackages.${system};
-      source = sources.${system};
-    in {
-      default = self.packages.${system}.opendeck;
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+    in
+    {
+      overlays.default = final: _prev: {
+        opendeck = final.callPackage ./package.nix { };
+      };
 
-      opendeck = if pkgs.stdenv.hostPlatform.isLinux then
+      packages = forAllSystems (
+        system:
         let
-          unwrapped = pkgs.stdenv.mkDerivation {
-            pname = "opendeck-unwrapped";
-            inherit version;
-            src = pkgs.fetchurl {
-              inherit (source) url sha256;
-            };
-            nativeBuildInputs = [ pkgs.dpkg ];
-            unpackPhase = ''
-              dpkg-deb -x $src .
-            '';
-            installPhase = ''
-              mkdir -p $out
-              cp -r usr/* $out/
-              if [ -d etc/udev ]; then
-                mkdir -p $out/lib/udev/rules.d
-                cp etc/udev/rules.d/* $out/lib/udev/rules.d/
-              fi
-            '';
-          };
-
-          fhs = pkgs.buildFHSEnv {
-            name = "opendeck";
-            targetPkgs = pkgs: with pkgs; [
-              unwrapped
-              webkitgtk_4_1
-              gtk3
-              glib
-              libsoup_3
-              cairo
-              gdk-pixbuf
-              pango
-              openssl
-              systemdMinimal
-              hidapi
-              libayatana-appindicator
-              hicolor-icon-theme
-              glib-networking
-              xdg-utils
-              nodejs
-              # Common libraries needed by GUI apps in FHS
-              fontconfig
-              freetype
-              dbus
-              zlib
-              libx11
-              libxcursor
-              libxrandr
-              libxi
-              libxext
-              libxdamage
-              libxfixes
-              libxcomposite
-              libxrender
-              libxtst
-              libxscrnsaver
-              libxinerama
-              libxkbcommon
-              wayland
-              mesa
-              libGL
-              libxcb
-              libxau
-              libxdmcp
-              cacert
-            ];
-            runScript = "opendeck";
-            profile = ''
-              export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
-              export GIO_EXTRA_MODULES=/usr/lib/gio/modules
-              export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
-            '';
-          };
+          pkgs = nixpkgs.legacyPackages.${system};
         in
-        pkgs.stdenv.mkDerivation {
-          pname = "opendeck";
-          inherit version;
-
-          phases = [ "installPhase" ];
-
-          installPhase = ''
-            mkdir -p $out/bin $out/share $out/lib
-
-            # Link the FHS wrapper
-            ln -s ${fhs}/bin/opendeck $out/bin/opendeck
-
-            # Copy icons and desktop files from unwrapped
-            cp -r ${unwrapped}/share/icons $out/share/
-            cp -r ${unwrapped}/share/applications $out/share/
-
-            # Copy udev rules
-            if [ -d ${unwrapped}/lib/udev ]; then
-              cp -r ${unwrapped}/lib/udev $out/lib/
-            fi
-
-            # Fix desktop file: absolute path + StartupWMClass for Wayland icon matching
-            substituteInPlace $out/share/applications/*.desktop \
-              --replace-fail "Exec=opendeck" "Exec=$out/bin/opendeck"
-            echo "StartupWMClass=opendeck" >> $out/share/applications/opendeck.desktop
-          '';
-
-          meta = with pkgs.lib; {
-            description = "Linux software for the Stream Deck with support for original Elgato Stream Deck plugins";
-            homepage = "https://github.com/nekename/OpenDeck";
-            license = licenses.gpl3Plus;
-            platforms = [ "x86_64-linux" "aarch64-linux" ];
-            mainProgram = "opendeck";
-          };
+        rec {
+          opendeck = pkgs.callPackage ./package.nix { };
+          default = opendeck;
         }
-      else
-        pkgs.stdenv.mkDerivation {
-          pname = "opendeck";
-          inherit version;
+      );
 
-          src = pkgs.fetchurl {
-            inherit (source) url sha256;
-          };
-
-          sourceRoot = ".";
-
-          installPhase = ''
-            runHook preInstall
-            mkdir -p $out/Applications $out/bin
-            cp -r OpenDeck.app $out/Applications/
-            cat > $out/bin/opendeck <<EOF
-            #!${pkgs.runtimeShell}
-            exec "$out/Applications/OpenDeck.app/Contents/MacOS/OpenDeck" "\$@"
-            EOF
-            chmod +x $out/bin/opendeck
-            runHook postInstall
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          app-test = pkgs.runCommand "opendeck-app-test" {
+            nativeBuildInputs = [
+              pkgs.xvfb-run
+              pkgs.coreutils
+            ];
+          } ''
+            code=0
+            xvfb-run -a timeout --preserve-status 2 ${self.packages.${system}.opendeck}/bin/opendeck || code=$?
+            if [ "$code" -eq 143 ] || [ "$code" -eq 124 ]; then
+              echo "Opendeck started successfully and was terminated by timeout (code $code)"
+              touch $out
+            else
+              echo "Opendeck failed with exit code $code"
+              exit 1
+            fi
           '';
+        }
+      );
 
-          meta = with pkgs.lib; {
-            description = "Linux software for the Stream Deck with support for original Elgato Stream Deck plugins";
-            homepage = "https://github.com/nekename/OpenDeck";
-            license = licenses.gpl3Plus;
-            platforms = [ "x86_64-darwin" "aarch64-darwin" ];
-            mainProgram = "opendeck";
-          };
+      darwinModules.default =
+        { pkgs, ... }:
+        {
+          environment.systemPackages = [ self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck ];
         };
-    });
-
-    overlays.default = final: _prev: {
-      opendeck = self.packages.${final.system}.opendeck;
     };
-
-    darwinModules.default = { pkgs, ... }: {
-      environment.systemPackages = [ self.packages.${pkgs.system}.opendeck ];
-    };
-  };
 }

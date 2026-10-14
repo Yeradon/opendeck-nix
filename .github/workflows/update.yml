@@ -19,64 +19,92 @@ jobs:
         uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Check for updates and modify flake.nix
+      - name: Check for updates and modify package.nix
         id: update
         run: |
-          # Get the latest release tag from GitHub API
+          UPDATED_APP="false"
+          UPDATED_LOCK="false"
+
+          # 1. Check upstream OpenDeck release
           LATEST_TAG=$(curl -sL https://api.github.com/repos/nekename/OpenDeck/releases/latest | jq -r .tag_name)
           VERSION=${LATEST_TAG#v}
-          
-          # Extract the current version from flake.nix
-          CURRENT_VERSION=$(grep -m1 -E 'version = "[^"]+"' flake.nix | cut -d '"' -f 2)
 
-          if [ "$VERSION" = "$CURRENT_VERSION" ]; then
-            echo "Already at latest version $VERSION"
+          CURRENT_VERSION=$(grep -m1 -E 'version = "[^"]+"' package.nix | cut -d '"' -f 2)
+
+          if [ -n "$VERSION" ] && [ "$VERSION" != "null" ] && [ "$VERSION" != "$CURRENT_VERSION" ]; then
+            echo "Updating OpenDeck from $CURRENT_VERSION to $VERSION"
+            sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$VERSION\"/" package.nix
+
+            echo "Fetching new hashes..."
+            for PLATFORM in "x86_64-linux amd64.deb" "aarch64-linux arm64.deb" "x86_64-darwin x64.app.tar.gz" "aarch64-darwin aarch64.app.tar.gz"; do
+              set -- $PLATFORM
+              SYS=$1
+              EXT=$2
+
+              if [[ "$SYS" == *-linux ]]; then
+                URL="https://github.com/nekename/OpenDeck/releases/download/v${VERSION}/opendeck_${VERSION}_${EXT}"
+              else
+                URL="https://github.com/nekename/OpenDeck/releases/download/v${VERSION}/OpenDeck_${EXT}"
+              fi
+
+              echo "Prefetching $URL for $SYS..."
+              HASH=$(nix-prefetch-url "$URL")
+
+              awk -v sys="$SYS" -v h="$HASH" '
+                $0 ~ sys " = {" { in_block = 1 }
+                in_block && /sha256 =/ {
+                  sub(/sha256 = "[^"]+"/, "sha256 = \"" h "\"")
+                  in_block = 0
+                }
+                { print }
+              ' package.nix > temp.nix && mv temp.nix package.nix
+            done
+            UPDATED_APP="true"
+          fi
+
+          # 2. Update flake.lock
+          echo "Updating flake.lock..."
+          nix flake update
+          if [ -n "$(git status --porcelain flake.lock)" ]; then
+            UPDATED_LOCK="true"
+          fi
+
+          if [ "$UPDATED_APP" = "false" ] && [ "$UPDATED_LOCK" = "false" ]; then
+            echo "Already up to date."
             echo "updated=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "Updating from $CURRENT_VERSION to $VERSION"
-          
-          # Update the version string in flake.nix
-          sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$VERSION\"/" flake.nix
-          
-          echo "Fetching new hashes..."
-          for PLATFORM in "x86_64-linux amd64.deb" "aarch64-linux arm64.deb" "x86_64-darwin x64.app.tar.gz" "aarch64-darwin aarch64.app.tar.gz"; do
-            set -- $PLATFORM
-            SYS=$1
-            EXT=$2
-            
-            if [[ "$SYS" == *-linux ]]; then
-              URL="https://github.com/nekename/OpenDeck/releases/download/v${VERSION}/opendeck_${VERSION}_${EXT}"
-            else
-              URL="https://github.com/nekename/OpenDeck/releases/download/v${VERSION}/OpenDeck_${EXT}"
-            fi
-            
-            echo "Prefetching $URL for $SYS..."
-            HASH=$(nix-prefetch-url "$URL")
-            
-            # Replace the hash for the specific system using awk
-            awk -v sys="$SYS" -v h="$HASH" '
-              $0 ~ sys " = {" { in_block = 1 }
-              in_block && /sha256 =/ {
-                sub(/sha256 = "[^"]+"/, "sha256 = \"" h "\"")
-                in_block = 0
-              }
-              { print }
-            ' flake.nix > temp.nix && mv temp.nix flake.nix
-          done
-          
           echo "updated=true" >> $GITHUB_OUTPUT
+          echo "updated_app=$UPDATED_APP" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          if [ "$UPDATED_APP" = "true" ] && [ "$UPDATED_LOCK" = "true" ]; then
+            TITLE="chore: update opendeck to $VERSION and bump flake lock"
+          elif [ "$UPDATED_APP" = "true" ]; then
+            TITLE="chore: update opendeck to $VERSION"
+          else
+            TITLE="chore(deps): update flake lock"
+          fi
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+
+      - name: Run app test
+        if: steps.update.outputs.updated == 'true'
+        run: nix flake check --print-build-logs
 
       - name: Create Pull Request
         if: steps.update.outputs.updated == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.PAT }}
-          commit-message: "chore(flake): update opendeck to ${{ steps.update.outputs.version }}"
-          title: "chore: update opendeck to ${{ steps.update.outputs.version }}"
-          body: "Automated update of OpenDeck to latest release version ${{ steps.update.outputs.version }}."
+          commit-message: "${{ steps.update.outputs.title }}"
+          title: "${{ steps.update.outputs.title }}"
+          body: |
+            Automated update.
+            - OpenDeck version: `${{ steps.update.outputs.version }}`
+            - Flake check & app test: Passed (`nix flake check`)
           branch: "update-opendeck"
           delete-branch: true
