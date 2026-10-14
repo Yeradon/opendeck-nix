@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -111,3 +112,40 @@ jobs:
             - Flake check & app test: Passed (`nix flake check`)
           branch: "update-opendeck"
           delete-branch: true
+
+      - name: Notify failure via GitHub Issue (deduplicated)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_TITLE="Automated OpenDeck update/check failed"
+          EXISTING_ISSUE=$(gh issue list --repo "${{ github.repository }}" --state open --search "$ISSUE_TITLE in:title" --json number -q '.[0].number')
+
+          if [ -n "$EXISTING_ISSUE" ]; then
+            echo "An open issue already exists (#$EXISTING_ISSUE). Adding a comment instead of duplicating..."
+            gh issue comment "$EXISTING_ISSUE" --repo "${{ github.repository }}" \
+              --body "Automated update/check failed again on run [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+          else
+            echo "Creating new issue..."
+            gh issue create --repo "${{ github.repository }}" \
+              --title "$ISSUE_TITLE" \
+              --body "The automated update workflow failed during execution or app test verification.
+
+- **Run URL:** [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+- **Triggered by:** \`${{ github.event_name }}\`
+
+Please inspect the run logs to determine why the build or app test failed."
+          fi
+
+      - name: Close existing failure issue if update succeeds
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_TITLE="Automated OpenDeck update/check failed"
+          EXISTING_ISSUE=$(gh issue list --repo "${{ github.repository }}" --state open --search "$ISSUE_TITLE in:title" --json number -q '.[0].number')
+          if [ -n "$EXISTING_ISSUE" ]; then
+            echo "Closing resolved issue #$EXISTING_ISSUE..."
+            gh issue close "$EXISTING_ISSUE" --repo "${{ github.repository }}" \
+              --comment "Resolved automatically: the latest update run [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) succeeded."
+          fi
