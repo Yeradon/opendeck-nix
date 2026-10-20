@@ -131,10 +131,10 @@ jobs:
               --title "$ISSUE_TITLE" \
               --body "The automated update workflow failed during execution or app test verification.
 
-- **Run URL:** [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-- **Triggered by:** \`${{ github.event_name }}\`
+              - **Run URL:** [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              - **Triggered by:** \`${{ github.event_name }}\`
 
-Please inspect the run logs to determine why the build or app test failed."
+              Please inspect the run logs to determine why the build or app test failed."
           fi
 
       - name: Close existing failure issue if update succeeds

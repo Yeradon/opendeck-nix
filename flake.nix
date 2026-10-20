@@ -40,10 +40,17 @@
             nativeBuildInputs = [
               pkgs.xvfb-run
               pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.dbus
             ];
           } ''
             code=0
-            xvfb-run -a timeout --preserve-status 2 ${self.packages.${system}.opendeck}/bin/opendeck || code=$?
+            LOG=$(mktemp)
+            dbus-run-session --config-file=${pkgs.dbus}/share/dbus-1/session.conf -- xvfb-run -a timeout --preserve-status 2 ${self.packages.${system}.opendeck}/bin/opendeck 2>&1 | tee "$LOG" || code=$?
+            if grep -qi "panic" "$LOG"; then
+              echo "Opendeck encountered a panic during startup!"
+              exit 1
+            fi
             if [ "$code" -eq 143 ] || [ "$code" -eq 124 ]; then
               echo "Opendeck started successfully and was terminated by timeout (code $code)"
               touch $out
